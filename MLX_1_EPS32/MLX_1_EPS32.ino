@@ -2,18 +2,22 @@
 #include <Wire.h>
 #include "MLX90640_API.h"
 #include "MLX90640_I2C_Driver.h"
-#include "SPI.h"
-#include "Adafruit_GFX.h"
-#include "Adafruit_ILI9341.h"
+#include <TFT_eSPI.h>
+#include <SPI.h>
 
+#define I2C_SDA 13
+#define I2C_SCL 12
 
-#define TFT_CS   15 
-#define TFT_DC    2
-#define TFT_MOSI 13
-#define TFT_CLK  14
-#define TFT_RST  26
-#define TFT_MISO 12
-#define TFT_LED  27
+//These must be set inside TFT_eSPI\User_Setup.h
+//Az alábbiakat a TFT_eSPI\User_Setup.h fáljban kell megadni!
+//#define TFT_MISO 23  //Not really needed
+//#define TFT_MOSI 16
+//#define TFT_SCLK 17
+//#define TFT_CS   15  // Chip select control pin
+//#define TFT_DC    4  // Data Command control pin
+//#define TFT_RST   2  // Reset pin (could connect to RST pin) 
+#define TFT_LED  5
+
 #define INTERPOLATED_COLS 96
 #define INTERPOLATED_ROWS 72
 
@@ -59,7 +63,7 @@
 
   
 
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
+TFT_eSPI tft = TFT_eSPI();
 
 const byte MLX90640_address = 0x33; // default address of the MLX90640
 
@@ -84,7 +88,7 @@ void setup()
    {
     Serial.begin(115200);
     
-    Wire.begin();
+    Wire.begin(I2C_SDA, I2C_SCL);
     Wire.setClock(400000); // I2C 400kHz
 
     while (!Serial); 
@@ -117,20 +121,21 @@ void setup()
         Serial.println(status);
        }
 
-  
+   
+    uint16_t tempPuffer[20];
 
-    MLX90640_I2CWrite(0x33, 0x800D, 6401); 
+    MLX90640_I2CWrite(MLX90640_address, 0x800D, 6401); 
     MLX90640_SetRefreshRate(MLX90640_address, 0x02); //1Hz refresh 
     //MLX90640_SetRefreshRate(MLX90640_address, 0x04); //4Hz refresh 
        
     pinMode(TFT_LED, OUTPUT);
     digitalWrite(TFT_LED, HIGH);
 
-    tft.begin();
+    tft.init();
 
     tft.setRotation(3);
 
-    tft.fillScreen(ILI9341_BLACK);
+    tft.fillScreen(TFT_BLACK);
  
 
     tft.drawLine(250, 210 - 0, 258, 210 - 0, tft.color565(255, 255, 255));
@@ -141,9 +146,8 @@ void setup()
     tft.drawLine(250, 210 - 150, 258, 210 - 150, tft.color565(255, 255, 255));
     tft.drawLine(250, 210 - 180, 258, 210 - 180, tft.color565(255, 255, 255));
 
-    tft.setCursor(220, 220);
-    tft.setTextColor(ILI9341_WHITE, tft.color565(0, 0, 0));
-    tft.print("T = ");    
+    tft.setTextColor(TFT_WHITE);
+    tft.drawString("T = ", 220, 220, 2);
 
 
     // scale vs T
@@ -152,7 +156,23 @@ void setup()
     for (i = 0; i < 181; i++)
        {
         tft.drawLine(240, 210 - i, 250, 210 - i, camColors[i+255-180]);
-       } 
+       }
+
+    //Print registers
+    status = MLX90640_I2CRead(MLX90640_address, 0x8000, 16, tempPuffer); 
+    if (status != 0)
+    {
+        Serial.println("Read failed...");
+        Serial.print(" status = ");
+        Serial.println(status);
+    }
+
+    for (int i = 0; i < 16; i++)
+    {
+      Serial.print(i);
+      Serial.print(": ");
+      Serial.println(tempPuffer[i]);
+    }
 
    } 
 
@@ -160,16 +180,23 @@ void setup()
 
 void loop()
    {
+    Wire.begin(I2C_SDA, I2C_SCL);
+
     for (byte x = 0 ; x < 2 ; x++) //Read
        {
         uint16_t mlx90640Frame[834];
-        int status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame);
+        Serial.println("Getting frame");
+        int status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame, Serial);
     
         if (status < 0)
            {
             Serial.print("Get Frame Error: ");
-            Serial.println(status);
            }
+          else
+           {
+            Serial.print("Frame status: ");
+           }
+            Serial.println(status);
 
         float vdd = MLX90640_GetVdd(mlx90640Frame, &mlx90640);
         float Ta = MLX90640_GetTa(mlx90640Frame, &mlx90640);
@@ -275,21 +302,14 @@ for (i = 0 ; i < 24 ; i++)
     tft.fillRect(260, 205, 37, 10, tft.color565(0, 0, 0));    
    
 
-    tft.setTextColor(ILI9341_WHITE, tft.color565(0, 0, 0));
-    tft.setCursor(265, 25);
-    tft.print(T_max, 1);
-    tft.setCursor(265, 205);
-    tft.print(T_min, 1);
-    tft.setCursor(245, 220);
-    tft.print(T_center, 1);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
+    tft.drawString(String(T_max, 0), 265, 25, 2);
+    tft.drawString(String(T_min, 0), 265, 205, 2);
+    tft.drawString(String(T_center, 0), 245, 220, 2);
 
-    tft.setCursor(300, 25);
-    tft.print("C");
-    tft.setCursor(300, 205);
-    tft.print("C");
-    tft.setCursor(265, 220);
-    tft.print("C");
-    
+    tft.drawString("C", 290, 25, 2);
+    tft.drawString("C", 290, 205, 2);
+    tft.drawString("C", 270, 220, 2);    
    
    }
    

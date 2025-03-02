@@ -41,7 +41,7 @@ int MLX90640_DumpEE(uint8_t slaveAddr, uint16_t *eeData)
      return MLX90640_I2CRead(slaveAddr, 0x2400, 832, eeData);
 }
 
-int MLX90640_GetFrameData(uint8_t slaveAddr, uint16_t *frameData)
+int MLX90640_GetFrameData(uint8_t slaveAddr, uint16_t *frameData, Stream &Serial)
 {
     uint16_t dataReady = 1;
     uint16_t controlRegister1;
@@ -56,9 +56,9 @@ int MLX90640_GetFrameData(uint8_t slaveAddr, uint16_t *frameData)
         if(error != 0)
         {
             return error;
-        }    
+        }
         dataReady = statusRegister & 0x0008;
-    }       
+    }
         
     while(dataReady != 0 && cnt < 5)
     { 
